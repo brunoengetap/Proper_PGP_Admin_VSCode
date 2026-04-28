@@ -1696,10 +1696,15 @@ function calcPartStatus(lastChange, interval, hourTotal){
 
 function getPartStatus(part, currentHour) {
   if (!part || part.na) return { level: 'na', label: 'N/A', next: null };
-  const last = parseInt(part.lastChange) || 0;
+  const last = (part.lastChange !== undefined && part.lastChange !== null && part.lastChange !== '')
+               ? parseInt(part.lastChange)
+               : null;
+  if (last === null) return { level: 'sem-dados', label: 'Não informado', next: null };
   const interval = parseInt(part.interval) || 0;
   if (!interval) return { level: 'sem-dados', label: 'Sem intervalo', next: null };
-  const next = last + interval;
+  const next = (last || 0) + interval;
+  if (last === 0 && currentHour > 0)
+    return { level: 'sem-dados', label: 'Não informado', next: null };
   const alertThreshold = next - (interval * 0.1);
   if (currentHour >= next) return { level: 'vencido', label: 'Vencida ' + (currentHour - next) + 'h atrás', next };
   if (currentHour >= alertThreshold) return { level: 'alerta', label: 'Faltam ' + (next - currentHour) + 'h', next };
@@ -2227,6 +2232,7 @@ function renderDashboard(){
 // PREVENTIVAS
 // ═══════════════════════════════════════════════════════════
 let _prevFilter='todos';
+let _prevSearch = '';
 
 function setPrevFilter(f){
   _prevFilter=f;
@@ -2274,7 +2280,7 @@ function renderPreventivas(){
         <div style="font-size:12px;color:var(--text2);margin-top:2px">Status de peças por máquina</div>
       </div>
       <input type="text" id="prevSearchInput" class="form-input" placeholder="Buscar cliente ou máquina..."
-             style="width:200px" oninput="renderPreventivas()" value="">
+             style="width:200px" oninput="_prevSearch=this.value;renderPreventivas()" value="${_prevSearch}">
     </div>
 
     <div class="prev-filters">
@@ -2297,7 +2303,7 @@ function renderPreventivas(){
           <th></th>
         </tr></thead>
         <tbody>${filtered.length?filtered.map(({eq,ws,parts})=>{
-          const search=(document.getElementById('prevSearchInput')?.value||'').toLowerCase();
+          const search=_prevSearch.toLowerCase();
           if(search&&!(eq.client+eq.brand+eq.model+eq.tag+eq.serial).toLowerCase().includes(search)) return '';
           const barColor=ws?.level==='vencido'?'var(--red)':ws?.level==='alerta'?'var(--orange)':ws?'var(--green)':'var(--gray-300)';
           // Peça mais crítica
@@ -2334,6 +2340,10 @@ function renderPreventivas(){
       </table>
     </div>
   `;
+  const _psi = document.getElementById('prevSearchInput');
+  if (_psi && document.activeElement?.id === 'prevSearchInput') {
+    requestAnimationFrame(() => { _psi.focus(); _psi.setSelectionRange(_psi.value.length, _psi.value.length); });
+  }
 }
 
 function renderCatalog(){
@@ -3675,7 +3685,7 @@ function _getEffectiveParts(eq){
     id: dp.id,
     name: (stored[dp.id]?.name) || dp.name,
     interval: (stored[dp.id]?.interval) || dp.interval,
-    lastChange: stored[dp.id]?.lastChange || 0,
+    lastChange: (stored[dp.id] && 'lastChange' in stored[dp.id]) ? stored[dp.id].lastChange : null,
     ref: stored[dp.id]?.ref || '',
     na: stored[dp.id]?.na || false,
     _default: true
@@ -3685,7 +3695,7 @@ function _getEffectiveParts(eq){
   Object.entries(stored).forEach(([pid, ps])=>{
     if(!defaultIds.has(pid)){
       list.push({id:pid, name:ps.name||pid, interval:ps.interval||2000,
-        lastChange:ps.lastChange||0, ref:ps.ref||'', na:ps.na||false, _default:false});
+        lastChange: ('lastChange' in ps) ? ps.lastChange : null, ref:ps.ref||'', na:ps.na||false, _default:false});
     }
   });
   return list;
@@ -4107,6 +4117,10 @@ function renderMachines(){
       </table>
     </div>
   `;
+  const _msi = document.getElementById('machineSearchInput');
+  if (_msi && document.activeElement?.id === 'machineSearchInput') {
+    requestAnimationFrame(() => { _msi.focus(); _msi.setSelectionRange(_msi.value.length, _msi.value.length); });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4302,6 +4316,10 @@ function renderClients(){
       </table></div>
     </div>`:''}
   `;
+  const _csi = document.getElementById('clientSearchInput');
+  if (_csi && document.activeElement?.id === 'clientSearchInput') {
+    requestAnimationFrame(() => { _csi.focus(); _csi.setSelectionRange(_csi.value.length, _csi.value.length); });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4597,6 +4615,45 @@ async function syncFromGS({ silent = false } = {}){
 
     const dv = await gsGet('getVisits');
     const visits = dv.status==='ok' ? dv.visits||[] : [];
+
+    // Sincronizar clientes do Sheets
+    let sheetClients = [];
+    try {
+      const dc = await gsGet('getClients');
+      if (dc.status === 'ok') sheetClients = dc.clients || [];
+    } catch(e) { console.warn('getClients falhou:', e); }
+
+    if (!db.clients) db.clients = [];
+    sheetClients.forEach(sc => {
+      const scId   = String(sc.ID   || sc.id   || '').trim();
+      const scNome = String(sc.Nome || sc.nome || '').trim();
+      if (!scId && !scNome) return;
+      const existing = db.clients.find(c =>
+        (scId && c.id === scId) ||
+        (scNome && normalizeEntityName(c.nome) === normalizeEntityName(scNome))
+      );
+      if (existing) {
+        if (!existing.cnpj     && sc.CNPJ)     existing.cnpj     = sc.CNPJ;
+        if (!existing.telefone && sc.Telefone)  existing.telefone = sc.Telefone;
+        if (!existing.email    && sc.Email)     existing.email    = sc.Email;
+        if (!existing.cidade   && sc.Cidade)    existing.cidade   = sc.Cidade;
+        if (!existing.drive_url && sc.Drive_URL) existing.drive_url = sc.Drive_URL;
+        if (!existing.antecedencia_alerta_dias && sc.Antecedencia_Alerta_Dias)
+          existing.antecedencia_alerta_dias = parseInt(sc.Antecedencia_Alerta_Dias) || 0;
+      } else {
+        db.clients.push({
+          id:    scId || ('CLI-' + Date.now()),
+          nome:  scNome,
+          cnpj:  sc.CNPJ    || '',
+          telefone: sc.Telefone || '',
+          email: sc.Email   || '',
+          cidade: sc.Cidade || '',
+          drive_url: sc.Drive_URL || '',
+          antecedencia_alerta_dias: parseInt(sc.Antecedencia_Alerta_Dias) || 0,
+          obs:   sc.Observações || '',
+        });
+      }
+    });
 
     let updMachines=0, newMachines=0, updParts=0, visitReconciled=0, visitCreated=0;
 
