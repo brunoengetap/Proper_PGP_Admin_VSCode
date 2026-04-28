@@ -723,10 +723,14 @@ function getMachinesByClient(clientQuery) {
 // GET CLIENTS FOR FIELD
 // ═══════════════════════════════════════════════════════════════════════════
 function getClientsForField() {
-  const names = getSheetDataActive('MAQUINAS')
+  const fromMachines = getSheetDataActive('MAQUINAS')
     .map(m => String(m['Cliente'] || '').trim())
     .filter(Boolean);
-  const unique = [...new Set(names)].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  const fromClients = getSheetDataActive('CLIENTES')
+    .map(c => String(c['Nome'] || '').trim())
+    .filter(Boolean);
+  const unique = [...new Set([...fromClients, ...fromMachines])]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
   return { status: 'ok', clients: unique };
 }
 
