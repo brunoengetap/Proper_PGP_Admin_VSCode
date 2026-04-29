@@ -536,7 +536,26 @@ tr:hover td{background:var(--gray-50)}
     <!-- MACHINES VIEW -->
     <div id="viewMachines" style="display:none"></div>
     <!-- CLIENTS VIEW -->
-    <div id="viewClients" style="display:none"></div>
+    <div id="viewClients" style="display:none">
+      <div id="clientsHeader" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:18px;font-weight:700">Clientes</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">Cadastro completo com alertas, Drive e contatos</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <div style="position:relative">
+            <input type="text" id="clientSearchInput" class="form-input"
+              placeholder="Buscar cliente, cidade, CNPJ..."
+              style="width:220px;padding-left:28px"
+              oninput="_clientSearch=this.value;renderClients()">
+            <svg style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          </div>
+          <button class="btn btn-secondary" onclick="mergeAllDuplicateClients()" style="font-size:11px">🔀 Mesclar duplicatas</button>
+          <button class="btn btn-primary" onclick="openModalClient()">+ Novo cliente</button>
+        </div>
+      </div>
+      <div id="clientsBody"></div>
+    </div>
     <!-- CONFIG VIEW -->
     <div id="viewConfig" style="display:none"></div>
   </main>
@@ -4143,8 +4162,7 @@ function setClientSort(field){
 }
 
 function renderClients(){
-  const _clientInputFocused = document.activeElement?.id === 'clientSearchInput';
-  const el=document.getElementById('viewClients');
+  const el=document.getElementById('clientsBody');
   if(!db.clients) db.clients=[];
 
   // Enriquecer clientes com dados das máquinas
@@ -4155,7 +4173,7 @@ function renderClients(){
   });
 
   // Busca
-  const q = _clientSearch.toLowerCase();
+  const q = (_clientSearch || '').toLowerCase();
 
   // Clientes registrados, filtrados e ordenados
   let registered=db.clients.filter(c=>
@@ -4199,24 +4217,6 @@ function renderClients(){
   };
 
   el.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-      <div>
-        <div style="font-size:18px;font-weight:700">Clientes</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:2px">Cadastro completo com alertas, Drive e contatos</div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <div style="position:relative">
-          <input type="text" id="clientSearchInput" class="form-input"
-            placeholder="Buscar cliente, cidade, CNPJ..."
-            style="width:220px;padding-left:28px"
-            value="${_clientSearch}" oninput="_clientSearch=this.value;renderClients()">
-          <svg style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        </div>
-        <button class="btn btn-secondary" onclick="mergeAllDuplicateClients()" style="font-size:11px">🔀 Mesclar duplicatas</button>
-        <button class="btn btn-primary" onclick="openModalClient()">+ Novo cliente</button>
-      </div>
-    </div>
-
     <!-- Stats -->
     <div class="stats-grid" style="margin-bottom:14px">
       <div class="stat-card no-action"><div class="stat-val">${total}</div><div class="stat-lbl">Clientes cadastrados</div></div>
@@ -4322,12 +4322,6 @@ function renderClients(){
       </table></div>
     </div>`:''}
   `;
-  if (_clientInputFocused) {
-    requestAnimationFrame(() => {
-      const _csi = document.getElementById('clientSearchInput');
-      if (_csi) { _csi.focus(); _csi.setSelectionRange(_csi.value.length, _csi.value.length); }
-    });
-  }
 }
 
 // ═══════════════════════════════════════════════════════════
