@@ -4155,6 +4155,14 @@ let _clientSort='nome';    // campo de ordenação
 let _clientSortDir='asc';  // 'asc' | 'desc'
 let _clientSearch='';      // busca
 
+function normalizeForSearch(value){
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 function setClientSort(field){
   if(_clientSort===field) _clientSortDir=_clientSortDir==='asc'?'desc':'asc';
   else{_clientSort=field;_clientSortDir='asc';}
@@ -4173,14 +4181,15 @@ function renderClients(){
   });
 
   // Busca
-  const q = (_clientSearch || '').toLowerCase();
+  const q = normalizeForSearch(_clientSearch);
 
   // Clientes registrados, filtrados e ordenados
   let registered=db.clients.filter(c=>
-    !q||c.nome.toLowerCase().includes(q)||
-    (c.cidade||'').toLowerCase().includes(q)||
-    (c.cnpj||'').includes(q)||
-    (c.email||'').toLowerCase().includes(q)
+    !q||
+    normalizeForSearch(c?.nome).includes(q)||
+    normalizeForSearch(c?.cidade).includes(q)||
+    normalizeForSearch(c?.cnpj).includes(q)||
+    normalizeForSearch(c?.email).includes(q)
   );
 
   // Ordenação
