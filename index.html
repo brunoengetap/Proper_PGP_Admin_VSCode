@@ -2240,6 +2240,7 @@ function setPrevFilter(f){
 }
 
 function renderPreventivas(){
+  const _prevInputFocused = document.activeElement?.id === 'prevSearchInput';
   const el=document.getElementById('viewPreventivas');
   if(!el) return;
 
@@ -2340,9 +2341,11 @@ function renderPreventivas(){
       </table>
     </div>
   `;
-  const _psi = document.getElementById('prevSearchInput');
-  if (_psi && document.activeElement?.id === 'prevSearchInput') {
-    requestAnimationFrame(() => { _psi.focus(); _psi.setSelectionRange(_psi.value.length, _psi.value.length); });
+  if (_prevInputFocused) {
+    requestAnimationFrame(() => {
+      const _psi = document.getElementById('prevSearchInput');
+      if (_psi) { _psi.focus(); _psi.setSelectionRange(_psi.value.length, _psi.value.length); }
+    });
   }
 }
 
@@ -4007,6 +4010,7 @@ function renderMachines(){
   if(!el) return;
 
   const search=(document.getElementById('machineSearchInput')?.value||'').toLowerCase();
+  const _machInputFocused = document.activeElement?.id === 'machineSearchInput';
   const byClient={};
   db.machines.forEach(eq=>{const k=eq.client||'Sem cliente';if(!byClient[k])byClient[k]=[];byClient[k].push(eq)});
 
@@ -4117,9 +4121,11 @@ function renderMachines(){
       </table>
     </div>
   `;
-  const _msi = document.getElementById('machineSearchInput');
-  if (_msi && document.activeElement?.id === 'machineSearchInput') {
-    requestAnimationFrame(() => { _msi.focus(); _msi.setSelectionRange(_msi.value.length, _msi.value.length); });
+  if (_machInputFocused) {
+    requestAnimationFrame(() => {
+      const _msi = document.getElementById('machineSearchInput');
+      if (_msi) { _msi.focus(); _msi.setSelectionRange(_msi.value.length, _msi.value.length); }
+    });
   }
 }
 
@@ -4137,6 +4143,7 @@ function setClientSort(field){
 }
 
 function renderClients(){
+  const _clientInputFocused = document.activeElement?.id === 'clientSearchInput';
   const el=document.getElementById('viewClients');
   if(!db.clients) db.clients=[];
 
@@ -4148,8 +4155,7 @@ function renderClients(){
   });
 
   // Busca
-  const q=(document.getElementById('clientSearchInput')?.value||_clientSearch).toLowerCase();
-  _clientSearch=q;
+  const q = _clientSearch.toLowerCase();
 
   // Clientes registrados, filtrados e ordenados
   let registered=db.clients.filter(c=>
@@ -4203,7 +4209,7 @@ function renderClients(){
           <input type="text" id="clientSearchInput" class="form-input"
             placeholder="Buscar cliente, cidade, CNPJ..."
             style="width:220px;padding-left:28px"
-            value="${q}" oninput="_clientSearch=this.value;renderClients()">
+            value="${q}" oninput="_clientSearch=this.value.toLowerCase();renderClients()">
           <svg style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         </div>
         <button class="btn btn-secondary" onclick="mergeAllDuplicateClients()" style="font-size:11px">🔀 Mesclar duplicatas</button>
@@ -4316,9 +4322,11 @@ function renderClients(){
       </table></div>
     </div>`:''}
   `;
-  const _csi = document.getElementById('clientSearchInput');
-  if (_csi && document.activeElement?.id === 'clientSearchInput') {
-    requestAnimationFrame(() => { _csi.focus(); _csi.setSelectionRange(_csi.value.length, _csi.value.length); });
+  if (_clientInputFocused) {
+    requestAnimationFrame(() => {
+      const _csi = document.getElementById('clientSearchInput');
+      if (_csi) { _csi.focus(); _csi.setSelectionRange(_csi.value.length, _csi.value.length); }
+    });
   }
 }
 
