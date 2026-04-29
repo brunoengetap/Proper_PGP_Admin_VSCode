@@ -4009,7 +4009,7 @@ function renderMachines(){
   const el=document.getElementById('viewMachines');
   if(!el) return;
 
-  const search=(document.getElementById('machineSearchInput')?.value||'').toLowerCase();
+  const search=(document.getElementById('machineSearchInput')?.value||'');
   const _machInputFocused = document.activeElement?.id === 'machineSearchInput';
   const byClient={};
   db.machines.forEach(eq=>{const k=eq.client||'Sem cliente';if(!byClient[k])byClient[k]=[];byClient[k].push(eq)});
@@ -4022,7 +4022,7 @@ function renderMachines(){
 
   // Filtrar máquinas
   let machines=db.machines.filter(eq=>{
-    const matchSearch=!search||(eq.client+eq.model+eq.brand+eq.serial+eq.tag).toLowerCase().includes(search);
+    const matchSearch=!search||(eq.client+eq.model+eq.brand+eq.serial+eq.tag).toLowerCase().includes(search.toLowerCase());
     const matchClient=!_machFilter||eq.client===_machFilter;
     const matchModel=!_machModelFilter||modelKey(eq.brand,eq.model)===_machModelFilter;
     return matchSearch&&matchClient&&matchModel;
@@ -4209,7 +4209,7 @@ function renderClients(){
           <input type="text" id="clientSearchInput" class="form-input"
             placeholder="Buscar cliente, cidade, CNPJ..."
             style="width:220px;padding-left:28px"
-            value="${q}" oninput="_clientSearch=this.value.toLowerCase();renderClients()">
+            value="${_clientSearch}" oninput="_clientSearch=this.value;renderClients()">
           <svg style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         </div>
         <button class="btn btn-secondary" onclick="mergeAllDuplicateClients()" style="font-size:11px">🔀 Mesclar duplicatas</button>
