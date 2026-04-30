@@ -4679,8 +4679,7 @@ async function syncFromGS({ silent = false } = {}){
       const newHour = parseInt(sm.hourTotal || sm['Hor.Total'])||0;
 
       if(eq){
-        const prevHour = parseInt(eq.hourTotal)||0;
-        if(newHour > prevHour){ eq.hourTotal=newHour; updMachines++; }
+        if(newHour > 0){ eq.hourTotal=newHour; updMachines++; }
         eq.client   = gsClient || eq.client || '';
         eq.branch   = sm.branch || sm['Filial'] || eq.branch || '';
         eq.brand    = gsBrand || eq.brand || '';
@@ -4776,7 +4775,7 @@ async function syncFromGS({ silent = false } = {}){
 
         let touched = false;
         const visitHour = parseInt(v.hourTotal || v['Hor.Total']) || 0;
-        if(visitHour > (parseInt(eq.hourTotal)||0)){ eq.hourTotal = visitHour; touched = true; }
+        if(visitHour > 0){ eq.hourTotal = visitHour; touched = true; }
         const visitHpw = parseInt(v.hpw || v['h/Semana']) || 0;
         if(visitHpw){ eq.hpw = visitHpw; touched = true; }
         const visitObs = v.generalObs || v['Observações'] || '';

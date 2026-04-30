@@ -1272,7 +1272,7 @@ function ensureMachineFromVisit(body, machineId, visitDate, now) {
       if (year)     sheet.getRange(i + 1, idxAno + 1).setValue(year);
       if (tag)      sheet.getRange(i + 1, idxTag + 1).setValue(tag);
       if (location) sheet.getRange(i + 1, idxLoc + 1).setValue(location);
-      if (hourTotal > existingHour) sheet.getRange(i + 1, idxHor + 1).setValue(hourTotal);
+      if (hourTotal > 0) sheet.getRange(i + 1, idxHor + 1).setValue(hourTotal);
       if (hpw)      sheet.getRange(i + 1, idxHpw + 1).setValue(hpw);
       if (obs)      sheet.getRange(i + 1, idxObs + 1).setValue(obs);
       sheet.getRange(i + 1, idxUpd + 1).setValue(now);
@@ -1301,7 +1301,7 @@ function ensureMachineFromVisit(body, machineId, visitDate, now) {
         if (year)     sheet.getRange(j + 1, idxAno + 1).setValue(year);
         if (tag)      sheet.getRange(j + 1, idxTag + 1).setValue(tag);
         if (location) sheet.getRange(j + 1, idxLoc + 1).setValue(location);
-        if (hourTotal > existingHour) sheet.getRange(j + 1, idxHor + 1).setValue(hourTotal);
+        if (hourTotal > 0) sheet.getRange(j + 1, idxHor + 1).setValue(hourTotal);
         if (hpw)      sheet.getRange(j + 1, idxHpw + 1).setValue(hpw);
         if (obs)      sheet.getRange(j + 1, idxObs + 1).setValue(obs);
         sheet.getRange(j + 1, idxUpd + 1).setValue(now);
@@ -1339,8 +1339,7 @@ function updateMachineHorímetro(machineId, serial, tag, hourTotal, visitDate) {
                   (tag       && rowTag === String(tag).trim());
 
     if (match) {
-      const existing = parseInt(data[i][idxHor]) || 0;
-      if (hourTotal > existing) {
+      if (hourTotal > 0) {
         sheet.getRange(i+1, idxHor+1).setValue(hourTotal);
       }
       sheet.getRange(i+1, idxUpd+1).setValue(new Date().toISOString());
