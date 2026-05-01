@@ -4402,10 +4402,10 @@ function renderConfigStats(){
 }
 
 async function resyncCatalogToGS(){
-  const ok = confirm('Isso reenviará o catálogo local deste navegador para o Google Sheets atual.
+const ok = confirm(`Isso reenviará o catálogo local deste navegador para o Google Sheets atual.
 Todos os modelos e peças locais serão enviados.
 
-Continuar?');
+Continuar?`);
   if(!ok) return;
   if(!gsUrl){ toast('Configure a URL do Google Sheets', 'error'); return; }
   if(!gsConnected){ await testGS(); if(!gsConnected){ toast('Google Sheets offline', 'error'); return; } }
