@@ -1684,11 +1684,21 @@ async function testGS(){
 }
 
 async function syncToGS(action,payload){
-  if(!gsUrl||!gsConnected) return;
-  try{
-    // Sem Content-Type: evita preflight CORS (Apps Script não responde OPTIONS)
-    await fetch(gsUrl,{method:'POST',body:JSON.stringify({action,key:_AUTH_HASH,...payload})});
-  }catch(e){console.warn('GS sync',e)}
+  if(!gsUrl||!gsConnected) return null;
+  // Sem Content-Type: evita preflight CORS (Apps Script não responde OPTIONS)
+  const r = await fetch(gsUrl,{method:'POST',body:JSON.stringify({action,key:_AUTH_HASH,...payload})});
+  const json = await r.json();
+  if(json.status!=='ok') throw new Error(json.error||'Erro GS');
+  return json;
+}
+
+async function gsGet(action, params = {}){
+  const qs = new URLSearchParams({ action, key:_AUTH_HASH, ...params });
+  const r = await fetch(gsUrl + '?' + qs.toString(), { method:'GET' });
+  const txt = await r.text();
+  if(txt.trim().startsWith('<'))
+    throw new Error('GAS retornou HTML — verifique a publicação do Web App');
+  return JSON.parse(txt);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2777,6 +2787,14 @@ function checkModelDuplicates(){
   }
 }
 
+
+function getAllModelPartsForSync(m){
+  return [
+    ...(m.directParts || []),
+    ...((m.subsystems || []).flatMap(s => s.parts || []))
+  ];
+}
+
 function saveModel(){
   const brand=document.getElementById('mBrand').value.trim();
   const model=document.getElementById('mModel').value.trim();
@@ -2794,6 +2812,7 @@ function saveModel(){
   };
   if(editModelId){
     Object.assign(getModel(editModelId),data);
+    syncToGS('saveModel',{ model:{ ...getModel(editModelId) } });
     editModelId=null;
     toast('Modelo atualizado','success');
   } else {
@@ -3896,129 +3915,58 @@ function openMachineDetail_OLD(id){ /* aposentada */ }
 // ═══════════════════════════════════════════════════════════
 // PROMOVER MÁQUINA AO CATÁLOGO
 // ═══════════════════════════════════════════════════════════
-function promoverAoCatalogo(machineId){
+async function promoverAoCatalogo(machineId){
   const eq=db.machines.find(m=>m.id===machineId);
   if(!eq) return;
-
-  // Verificar se já existe modelo com mesma marca/modelo
   const existing=db.models.find(m=>modelKey(m.brand,m.model)===modelKey(eq.brand,eq.model));
-
   if(existing){
-    // Já existe — oferecer mesclar referências de peças
     const partsCount=Object.keys(eq.parts||{}).filter(k=>eq.parts[k].ref).length;
-    const msg=`O modelo "${existing.brand} ${existing.model}" já existe no catálogo.\n\n`+
-      (partsCount>0?`Esta máquina tem ${partsCount} referência(s) de peças que podem ser mescladas ao catálogo.\n\nDeseja mesclar as referências?`:'Deseja abrir o modelo existente?');
+    const msg=`O modelo "${existing.brand} ${existing.model}" já existe no catálogo.
+
+`+
+      (partsCount>0?`Esta máquina tem ${partsCount} referência(s) de peças que podem ser mescladas ao catálogo.
+
+Deseja mesclar as referências?`:'Deseja abrir o modelo existente?');
     if(confirm(msg)&&partsCount>0){
-      // Mesclar referências de peças nas peças diretas do catálogo
-      const partIdToName={
-        filtro_oleo:'Filtro de Óleo', filtro_ar_prim:'Filtro de Ar Primário',
-        filtro_ar_secu:'Filtro de Ar Secundário', separador:'Separador Ar/Óleo',
-        oleo_lubrif:'Óleo Lubrificante', v_termostatica:'Válvula Termostática',
-        v_admissao:'Válvula de Admissão', v_pressao_min:'Válvula Pressão Mínima',
-        correia:'Correia',
-      };
+      const partIdToName={filtro_oleo:'Filtro de Óleo',filtro_ar_prim:'Filtro de Ar Primário',filtro_ar_secu:'Filtro de Ar Secundário',separador:'Separador Ar/Óleo',oleo_lubrif:'Óleo Lubrificante',v_termostatica:'Válvula Termostática',v_admissao:'Válvula de Admissão',v_pressao_min:'Válvula Pressão Mínima',correia:'Correia'};
       let merged=0;
-      Object.entries(eq.parts||{}).forEach(([pid,ps])=>{
-        if(!ps.ref) return;
-        const partName=ps.name||partIdToName[pid]||pid;
-        // Procurar peça no catálogo pelo nome
-        const catPart=existing.directParts?.find(p=>p.name.toLowerCase()===partName.toLowerCase());
-        if(catPart&&!catPart.ref){catPart.ref=ps.ref;merged++;}
-        else if(!catPart){
-          // Adicionar peça nova no catálogo
-          if(!existing.directParts) existing.directParts=[];
-          existing.directParts.push({
-            id:'dp-'+uid(),name:partName,ref:ps.ref,
-            partBrand:'',
-            supplierPrimary:'',
-            interval:ps.interval||2000,qty:1,supplier:'',cost:0,
-            criticality:'normal',similarities:[],obs:'',slot:''
-          });
-          merged++;
+      Object.entries(eq.parts||{}).forEach(([pid,ps])=>{ if(!ps.ref) return; const partName=ps.name||partIdToName[pid]||pid; const catPart=existing.directParts?.find(p=>p.name.toLowerCase()===partName.toLowerCase()); if(catPart&&!catPart.ref){catPart.ref=ps.ref;merged++;} else if(!catPart){ if(!existing.directParts) existing.directParts=[]; existing.directParts.push({id:'dp-'+uid(),name:partName,ref:ps.ref,partBrand:'',supplierPrimary:'',interval:ps.interval||2000,qty:1,supplier:'',cost:0,criticality:'normal',similarities:[],obs:'',slot:''}); merged++; }});
+      save(); renderSidebar(); renderCatalog();
+      try{
+        await syncToGS('saveModel',{model:existing});
+        const parts=getAllModelPartsForSync(existing);
+        for(const p of parts) await syncToGS('savePartMaster',{part:{...p,modelId:existing.id}});
+        for(const p of parts){
+          const sims=(p.similarities||[]).map(s=>typeof s==='string'?{ref:s,brand:'',obs:''}:s);
+          await syncToGS('replacePartSimilarities',{partId:p.id,modelId:existing.id,similarities:sims});
         }
-      });
-      save();
-      syncToGS('saveModel',{model:existing});
-      existing.directParts.forEach(p=>{
-        if(!p.partBrand) p.partBrand='';
-        if(!p.supplierPrimary) p.supplierPrimary=p.supplier||'';
-        if(!Array.isArray(p.similarities)) p.similarities=[];
-        else p.similarities=p.similarities.map(s=>typeof s==='string'?{ref:s,brand:'',obs:''}:s);
-        syncToGS('savePartMaster',{part:{...p,modelId:existing.id}});
-        syncToGS('replacePartSimilarities',{
-          partId:p.id,modelId:existing.id,similarities:p.similarities
-        });
-      });
-      toast(`${merged} referência(s) mesclada(s) ao catálogo`,'success');
+        toast(`${merged} referência(s) mesclada(s) ao catálogo`,'success');
+        closeModal('modalMachineParts');
+      }catch(err){ toast('Erro ao salvar no Sheets: '+err.message+' (salvo localmente)','error'); return; }
     }
-    closeModal('modalMachineParts');
-    selectModel(existing.id);
-    showView('catalog');
-    return;
+    selectModel(existing.id); showView('catalog'); return;
   }
+  if(!confirm(`Criar modelo "${eq.brand} ${eq.model}" no catálogo a partir desta máquina?
 
-  // Não existe — criar novo modelo a partir da máquina
-  if(!confirm(`Criar modelo "${eq.brand} ${eq.model}" no catálogo a partir desta máquina?\n\nAs referências de peças cadastradas serão importadas.`)) return;
-
-  const newModel={
-    id:'m-'+uid(),
-    brand:eq.brand||'',
-    model:eq.model||'',
-    type:eq.type||'Compressor Parafuso',
-    power:eq.power||'',
-    pressure:'',flow:'',voltage:'',ampere:'',obs:'',
-    photos:[],subsystems:[],
-    directParts:[],
-  };
-
-  // Importar peças com referências
-  const partIdToName={
-    filtro_oleo:'Filtro de Óleo',       filtro_ar_prim:'Filtro de Ar Primário',
-    filtro_ar_secu:'Filtro de Ar Secundário', separador:'Separador Ar/Óleo',
-    oleo_lubrif:'Óleo Lubrificante',    v_termostatica:'Válvula Termostática',
-    v_admissao:'Válvula de Admissão',   v_pressao_min:'Válvula Pressão Mínima',
-    correia:'Correia',
-  };
+As referências de peças cadastradas serão importadas.`)) return;
+  const newModel={id:'m-'+uid(),brand:eq.brand||'',model:eq.model||'',type:eq.type||'Compressor Parafuso',power:eq.power||'',pressure:'',flow:'',voltage:'',ampere:'',obs:'',photos:[],subsystems:[],directParts:[]};
+  const partIdToName={filtro_oleo:'Filtro de Óleo',filtro_ar_prim:'Filtro de Ar Primário',filtro_ar_secu:'Filtro de Ar Secundário',separador:'Separador Ar/Óleo',oleo_lubrif:'Óleo Lubrificante',v_termostatica:'Válvula Termostática',v_admissao:'Válvula de Admissão',v_pressao_min:'Válvula Pressão Mínima',correia:'Correia'};
   const DEFAULT_INT={filtro_oleo:2000,filtro_ar_prim:2000,filtro_ar_secu:4000,separador:4000,oleo_lubrif:2000,v_termostatica:8000,v_admissao:8000,v_pressao_min:8000,correia:4000};
-
-  Object.entries(eq.parts||{}).forEach(([pid,ps])=>{
-    newModel.directParts.push({
-      id:'dp-'+uid(),
-      name:ps.name||partIdToName[pid]||pid,
-      ref:ps.ref||'',
-      partBrand:'',
-      supplierPrimary:'',
-      interval:ps.interval||DEFAULT_INT[pid]||2000,
-      qty:1,supplier:'',cost:0,criticality:'normal',similarities:[],obs:'',slot:''
-    });
-  });
-
-  // Se não tinha peças, adicionar as 9 padrão sem referência
-  if(!newModel.directParts.length){
-    Object.entries(partIdToName).forEach(([pid,name])=>{
-      newModel.directParts.push({
-        id:'dp-'+uid(),name,ref:'',
-        partBrand:'',
-        supplierPrimary:'',
-        interval:DEFAULT_INT[pid]||2000,
-        qty:1,supplier:'',cost:0,criticality:'normal',similarities:[],obs:'',slot:''
-      });
-    });
-  }
-
-  db.models.push(newModel);
-  save();
-  syncToGS('saveModel',{model:newModel});
-  newModel.directParts.forEach(p=>{
-    syncToGS('savePartMaster',{part:{...p,modelId:newModel.id}});
-    syncToGS('replacePartSimilarities',{
-      partId:p.id,modelId:newModel.id,similarities:p.similarities||[]
-    });
-  });
-  toast(`Modelo "${newModel.brand} ${newModel.model}" criado no catálogo`,'success');
-  closeModal('modalMachineParts');
-  selectModel(newModel.id);
-  showView('catalog');
+  Object.entries(eq.parts||{}).forEach(([pid,ps])=>{newModel.directParts.push({id:'dp-'+uid(),name:ps.name||partIdToName[pid]||pid,ref:ps.ref||'',partBrand:'',supplierPrimary:'',interval:ps.interval||DEFAULT_INT[pid]||2000,qty:1,supplier:'',cost:0,criticality:'normal',similarities:[],obs:'',slot:''});});
+  if(!newModel.directParts.length){Object.entries(partIdToName).forEach(([pid,name])=>newModel.directParts.push({id:'dp-'+uid(),name,ref:'',partBrand:'',supplierPrimary:'',interval:DEFAULT_INT[pid]||2000,qty:1,supplier:'',cost:0,criticality:'normal',similarities:[],obs:'',slot:''}));}
+  db.models.push(newModel); save(); renderSidebar(); renderCatalog();
+  try{
+    await syncToGS('saveModel',{model:newModel});
+    const parts=getAllModelPartsForSync(newModel);
+    for(const p of parts) await syncToGS('savePartMaster',{part:{...p,modelId:newModel.id}});
+    for(const p of parts){
+      const sims=(p.similarities||[]).map(s=>typeof s==='string'?{ref:s,brand:'',obs:''}:s);
+      await syncToGS('replacePartSimilarities',{partId:p.id,modelId:newModel.id,similarities:sims});
+    }
+    toast(`Modelo "${newModel.brand} ${newModel.model}" criado no catálogo`,'success');
+    closeModal('modalMachineParts');
+  }catch(err){ toast('Erro ao salvar no Sheets: '+err.message+' (salvo localmente)','error'); return; }
+  selectModel(newModel.id); showView('catalog');
 }
 
 let _machFilter=''; // filtro de cliente ativo
@@ -4408,6 +4356,7 @@ function renderConfigStats(){
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary" onclick="syncFromGS()">↓ Sincronizar agora</button>
+        <button class="btn btn-secondary" onclick="resyncCatalogToGS()">↑ Reenviar catálogo para Sheets</button>
         <span id="syncStatus" style="font-size:11px;color:var(--text2)"></span>
       </div>
     </div>
@@ -4450,6 +4399,32 @@ function renderConfigStats(){
     </div>
   `;
   if(gsUrl) document.getElementById('gsUrlInput').value=gsUrl;
+}
+
+async function resyncCatalogToGS(){
+  const ok = confirm(`Isso reenviará o catálogo local deste navegador para o Google Sheets atual.
+Todos os modelos e peças locais serão enviados.
+
+Continuar?`);
+  if(!ok) return;
+  if(!gsUrl){ toast('Configure a URL do Google Sheets', 'error'); return; }
+  if(!gsConnected){ await testGS(); if(!gsConnected){ toast('Google Sheets offline', 'error'); return; } }
+  try{
+    for(const m of (db.models||[])){
+      await syncToGS('saveModel',{model:m});
+      const parts=getAllModelPartsForSync(m);
+      for(const p of parts) await syncToGS('savePartMaster',{part:{...p,modelId:m.id}});
+      for(const p of parts){
+        const sims=(p.similarities||[]).map(s=>typeof s==='string'?{ref:s,brand:'',obs:''}:s);
+        try{
+          await syncToGS('replacePartSimilarities',{partId:p.id,modelId:m.id,similarities:sims});
+        }catch(err){ console.error('replacePartSimilarities falhou', m.id, p.id, err); }
+      }
+    }
+    toast('Catálogo reenviado com sucesso','success');
+  }catch(err){
+    toast('Erro: '+err.message,'error');
+  }
 }
 
 async function seedDemoData(){
@@ -4587,6 +4562,101 @@ async function seedDemoData(){
   }
 }
 
+async function syncCatalogFromGS(gsGet){
+  try{
+    const result = await gsGet('getCatalogFull');
+    if(result.status!=='ok'){
+      console.warn('getCatalogFull retornou erro:', result.error||'');
+      return;
+    }
+    const modelsRows = result.models || [];
+    const partsRows = result.parts || [];
+    const simRows = result.similarities || [];
+
+    const norm = (v)=>String(v||'').trim().toLowerCase();
+    const modelById = new Map((db.models||[]).map(m=>[String(m.id), m]));
+
+    for(const row of modelsRows){
+      if(String(row.Ativo||'').trim().toUpperCase()==='NÃO') continue;
+      const rowId = String(row.ID||'').trim();
+      const brand = row.Marca || '';
+      const model = row.Modelo || '';
+      if(!brand && !model && !rowId) continue;
+
+      let target = rowId ? modelById.get(rowId) : null;
+      if(!target){
+        target = (db.models||[]).find(m=>norm(m.brand)===norm(brand) && norm(m.model)===norm(model));
+      }
+      if(target){
+        target.id = target.id || rowId || target.id;
+        target.brand = brand;
+        target.model = model;
+        target.type = row.Tipo || '';
+        target.power = row['Potência'] || '';
+        target.pressure = row['Pressão'] || '';
+        target.obs = row['Observações'] || '';
+        target.tipoRegistro = row.Tipo_Registro || target.tipoRegistro || 'PRODUCAO';
+      } else {
+        target = {
+          id: rowId || uid(),
+          brand, model,
+          type: row.Tipo || '',
+          power: row['Potência'] || '',
+          pressure: row['Pressão'] || '',
+          obs: row['Observações'] || '',
+          tipoRegistro: row.Tipo_Registro || 'PRODUCAO',
+          photos:[], subsystems:[], directParts:[], flow:'', voltage:'', ampere:''
+        };
+        db.models.push(target);
+      }
+      if(!Array.isArray(target.photos)) target.photos=[];
+      if(!Array.isArray(target.subsystems)) target.subsystems=[];
+      if(!Array.isArray(target.directParts)) target.directParts=[];
+      target.flow = target.flow || '';
+      target.voltage = target.voltage || '';
+      target.ampere = target.ampere || '';
+      modelById.set(String(target.id), target);
+    }
+
+    for(const row of partsRows){
+      if(String(row.Ativo||'').trim().toUpperCase()==='NÃO') continue;
+      const modelId = String(row.Model_ID||'').trim();
+      const partId = String(row.Part_ID||'').trim();
+      if(!modelId || !partId) continue;
+      const model = (db.models||[]).find(m=>String(m.id)===modelId);
+      if(!model) continue;
+      if(!Array.isArray(model.directParts)) model.directParts=[];
+      let part = model.directParts.find(p=>String(p.id)===partId);
+      if(part){
+        const sims = Array.isArray(part.similarities)?part.similarities:[];
+        Object.assign(part,{id:partId,name:row.Name||'',ref:row.OEM_Ref||'',partBrand:row.Part_Brand||'',supplierPrimary:row.Supplier_Primary||'',slot:row.Slot||'',qty:parseInt(row.Qty_Default)||1,interval:parseInt(row.Interval_H)||0,criticality:row.Criticality||'normal',cost:parseFloat(row.Cost)||0,obs:row.Obs||''});
+        part.similarities=sims;
+      } else {
+        model.directParts.push({id:partId,name:row.Name||'',ref:row.OEM_Ref||'',partBrand:row.Part_Brand||'',supplierPrimary:row.Supplier_Primary||'',slot:row.Slot||'',qty:parseInt(row.Qty_Default)||1,interval:parseInt(row.Interval_H)||0,criticality:row.Criticality||'normal',cost:parseFloat(row.Cost)||0,obs:row.Obs||'',similarities:[]});
+      }
+    }
+
+    const groups = new Map();
+    for(const row of simRows){
+      if(String(row.Ativo||'').trim().toUpperCase()==='NÃO') continue;
+      const ref = String(row.Ref_Similar||'').trim();
+      if(!ref) continue;
+      const k = `${String(row.Part_ID||'').trim()}::${String(row.Model_ID||'').trim()}`;
+      if(!groups.has(k)) groups.set(k,[]);
+      groups.get(k).push({ref, brand:row.Brand_Similar||'', obs:row.Obs||''});
+    }
+    for(const [key,sims] of groups){
+      const [partId, modelId] = key.split('::');
+      const m = (db.models||[]).find(x=>String(x.id)===modelId);
+      const p = m?.directParts?.find(x=>String(x.id)===partId);
+      if(p) p.similarities = sims;
+    }
+    for(const m of (db.models||[])) for(const p of (m.directParts||[])) if(!Array.isArray(p.similarities)) p.similarities=[];
+  }catch(err){
+    console.warn('syncCatalogFromGS falhou:', err);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════
 // SINCRONIZAR DO SHEETS → LOCAL
 // ═══════════════════════════════════════════════════════════
@@ -4610,13 +4680,6 @@ async function syncFromGS({ silent = false } = {}){
   setMsg('⏳ Sincronizando...','var(--blue-mid)');
   setSyncHeaderStatus('syncing');
   if(!silent) toast('Sincronizando...','');
-
-  async function gsGet(action){
-    const r=await fetch(gsUrl+'?action='+action+'&key='+_AUTH_HASH,{method:'GET'});
-    const txt=await r.text();
-    if(txt.trim().startsWith('<')) throw new Error('Apps Script retornou HTML — publique o Web App para "Qualquer pessoa, sem necessidade de login"');
-    return JSON.parse(txt);
-  }
 
   try{
     const beforeHash = _dbHash(db);
@@ -4665,6 +4728,8 @@ async function syncFromGS({ silent = false } = {}){
         });
       }
     });
+
+    await syncCatalogFromGS(gsGet);
 
     let updMachines=0, newMachines=0, updParts=0, visitReconciled=0, visitCreated=0;
 
