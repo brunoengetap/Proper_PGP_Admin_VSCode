@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ProperCare Manager · Gestão PGP v3.4</title>
+<title>ProperCare Manager · Gestão PGP v3.5</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -467,7 +467,7 @@ tr:hover td{background:var(--gray-50)}
       <div class="login-logo-mark">PC</div>
       <div class="login-logo-text">Proper Compressores</div>
     </div>
-    <div class="login-sub">ProperCare Manager · v3.4 — Acesso restrito</div>
+    <div class="login-sub">ProperCare Manager · v3.5 — Acesso restrito</div>
     <label class="login-label">Senha de acesso</label>
     <input class="login-input" type="password" id="loginInput" placeholder="••••••"
            maxlength="20" onkeydown="if(event.key==='Enter')loginEntrar()">
@@ -3666,7 +3666,14 @@ function renderHistoricoPreventivas(visits, pecasLog) {
       ? `<div style="margin-top:6px">
           <a href="#" style="font-size:12px" onclick="toggleVisitParts('${extraId}',this);return false;">Ver todas as peças desta visita ▸</a>
           <div id="${extraId}" style="display:none;margin-top:6px">
-            ${outras.map(p=>`<div style="font-size:12px;color:var(--text2)">• ${p.name||p.partName||'Peça'} — ${p.acao||'—'}</div>`).join('')}
+            ${outras.map(p=>{
+              const statusBadgeHtml = p.status
+                ? `<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;${p.status==='VENCIDO'?'background:#fce;color:#c0392b':p.status==='ATENÇÃO'?'background:#fff0cc;color:#b87000':'background:#e6f7ed;color:#1e8c4a'}">${p.status}</span>`
+                : '';
+              const hRodadas = p.horasRodadas ? ` · ${p.horasRodadas}h rod.` : '';
+              const hRest = p.horasRestantes ? ` · ${p.horasRestantes}h rest.` : '';
+              return `<div style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;margin-bottom:2px">• ${p.name||p.partName||'Peça'} — ${p.acao||'—'}${hRodadas}${hRest} ${statusBadgeHtml}</div>`;
+            }).join('')}
           </div>
         </div>`
       : '';
@@ -4841,6 +4848,10 @@ async function syncFromGS({ silent = false } = {}){
         if(visitObs){ eq.obs = visitObs; touched = true; }
         const visitDate = dateOnlyISO(v.visitDate || v['Data'] || v['Visit_Date']);
         if(visitDate){ eq.lastVisit = visitDate; touched = true; }
+        // v1.5: preservar novos campos da visita
+        if(v.nextVisit && !eq.nextVisit){ eq.nextVisit = v.nextVisit; touched = true; }
+        if(v.contact   && !eq.contact)  { eq.contact   = v.contact;  touched = true; }
+        if(v.cnpj      && !eq.cnpj)     { eq.cnpj      = v.cnpj;     touched = true; }
 
         const visitParts = v.parts && typeof v.parts === 'object' ? v.parts : null;
         if(visitParts){
@@ -4853,6 +4864,12 @@ async function syncFromGS({ silent = false } = {}){
               interval: ps.interval ? parseInt(ps.interval)||2000 : (ex.interval||2000),
               ref: ps.ref || ex.ref || '',
               na: ps.na!==undefined ? !!ps.na : !!ex.na,
+              // v1.5: preservar campos calculados
+              contador:      ps.contador      || ex.contador      || '',
+              valorMostrado: ps.valorMostrado || ex.valorMostrado || '',
+              horasRodadas:  ps.horasRodadas  || ex.horasRodadas  || '',
+              horasRestantes:ps.horasRestantes|| ex.horasRestantes|| '',
+              status:        ps.status        || ex.status        || '',
             };
             updParts++;
           });
