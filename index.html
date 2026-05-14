@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ProperCare Manager · Gestão PGP v3.6</title>
+<title>ProperCare Manager · Gestão PGP v3.7</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -467,7 +467,7 @@ tr:hover td{background:var(--gray-50)}
       <div class="login-logo-mark">PC</div>
       <div class="login-logo-text">Proper Compressores</div>
     </div>
-    <div class="login-sub">ProperCare Manager · v3.6 — Acesso restrito</div>
+    <div class="login-sub">ProperCare Manager · v3.7 — Acesso restrito</div>
     <label class="login-label">Senha de acesso</label>
     <input class="login-input" type="password" id="loginInput" placeholder="••••••"
            maxlength="20" onkeydown="if(event.key==='Enter')loginEntrar()">
@@ -481,7 +481,7 @@ tr:hover td{background:var(--gray-50)}
     <div class="logo-mark">PC</div>
     <div class="logo-text">Proper Compressores</div>
     <div class="logo-sep"></div>
-    <div class="logo-sub">PCM v3.6</div>
+    <div class="logo-sub">PCM v3.7</div>
   </div>
   <nav class="header-nav">
     <button class="nav-btn active" onclick="showView('dashboard')" id="navDashboard">Dashboard</button>
@@ -3790,7 +3790,7 @@ function _renderPartsEditor(eq){
       <td style="min-width:150px">
         <input class="pe-input" style="font-family:'IBM Plex Sans',monospace" value="${p.name}" id="pe-name-${i}" placeholder="Nome da peça">
       </td>
-      <td style="width:90px"><input class="pe-input" type="number" value="${p.lastChange||''}" id="pe-last-${i}" placeholder="ex: 5091"></td>
+      <td style="width:90px"><input class="pe-input" type="number" value="${(p.lastChange!==null&&p.lastChange!==undefined&&p.lastChange!=='')?p.lastChange:''}" id="pe-last-${i}" placeholder="ex: 5091"></td>
       <td style="width:90px"><input class="pe-input" type="number" value="${p.interval||''}" id="pe-int-${i}" placeholder="ex: 2000"></td>
       <td style="width:110px"><input class="pe-input" value="${p.ref||''}" id="pe-ref-${i}" placeholder="ex: W962"></td>
       <td style="width:60px;text-align:center">
